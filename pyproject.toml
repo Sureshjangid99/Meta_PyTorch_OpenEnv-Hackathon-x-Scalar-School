@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "data-cleaning-env"
+version = "1.0.0"
+description = "OpenEnv environment for data cleaning tasks"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "suresh9970"}
+]
+keywords = ["openenv", "data-cleaning", "rl", "environment"]
+dependencies = [
+    "fastapi==0.111.0",
+    "uvicorn[standard]==0.29.0",
+    "pydantic==2.7.1",
+    "pandas==2.2.2",
+    "numpy==1.26.4",
+    "openai==1.30.1",
+    "python-multipart==0.0.9",
+    "PyYAML==6.0.1",
+]
+
+[project.urls]
+Homepage = "https://huggingface.co/spaces/suresh9970/data-cleaning-env"
+Repository = "https://github.com/Sureshjangid99/data-cleaning-env"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["env*", "tasks*"]
