@@ -2,7 +2,7 @@
 DataCleaningEnv — Single file FastAPI app
 All logic merged. No sub-module imports needed.
 """
-import os, sys, re, json, math, random, traceback
+import os, sys, re, json, random, traceback
 import numpy as np
 import pandas as pd
 from typing import Any, Dict, List, Optional, Tuple
@@ -10,22 +10,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-
-# ══════════════════════════════════════════════════════════════
-# NaN/Inf SANITIZER — fixes "Out of range float values" error
-# ══════════════════════════════════════════════════════════════
-
-def sanitize(obj):
-    """Recursively replace NaN/Inf floats with None (JSON-safe)."""
-    if isinstance(obj, float):
-        if math.isnan(obj) or math.isinf(obj):
-            return None
-        return obj
-    elif isinstance(obj, dict):
-        return {k: sanitize(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [sanitize(i) for i in obj]
-    return obj
 
 # ══════════════════════════════════════════════════════════════
 # PYDANTIC MODELS
@@ -302,22 +286,18 @@ class DataCleaningEnv:
         self._prev_score = 0.0
         return self._obs()
 
-    # ── BUG FIX: step() was accidentally placed inside reset() as dead code ──
-    def step(self, action: Action) -> Tuple[Observation, Reward, bool, Dict]:
+    def step(self, action: Action):
         if self._done:
-            raise RuntimeError("Episode done. Call /reset first.")
-
+            raise RuntimeError("Call reset() first.")
         self._step_count += 1
-        info: Dict[str, Any] = {"step": self._step_count, "action_applied": action.action_type}
+        info: Dict = {"action": action.action_type, "step": self._step_count}
 
         if action.action_type == "submit" or self._step_count >= MAX_STEPS:
             self._done = True
             score, reason = self.task_info["grader"](self._df)
             mult = 1.0 if action.action_type == "submit" else 0.7
             info["final_score"] = float(score)
-            return (self._obs(done=True),
-                    Reward(value=round(float(score)*mult, 4), reason=f"Score:{score:.3f}|{reason}"),
-                    True, info)
+            return self._obs(done=True), Reward(value=round(float(score)*mult,4), reason=f"Score:{score:.3f}|{reason}"), True, info
 
         try:
             changed = self._apply(action)
@@ -335,7 +315,7 @@ class DataCleaningEnv:
         except Exception as e:
             rv = -0.05; rr = f"Error:{e}"; info["error"] = str(e)
 
-        return self._obs(), Reward(value=round(rv, 4), reason=rr), False, info
+        return self._obs(), Reward(value=round(rv,4), reason=rr), False, info
 
     def state(self) -> Dict:
         if self._df is None:
@@ -352,11 +332,10 @@ class DataCleaningEnv:
         }
 
     def _obs(self, done: bool = False) -> Observation:
-        # Replace NaN with None before building rows
-        safe_df = self._df.where(self._df.notna(), other=None)
-        rows = safe_df.to_dict(orient="records")
-        # Sanitize any remaining float NaN/Inf
-        rows = sanitize(rows)
+        safe = {}
+        for col in self._df.columns:
+            safe[col] = self._df[col].where(self._df[col].notna(), other=None)
+        rows = pd.DataFrame(safe).to_dict(orient="records")
         return Observation(
             rows=rows,
             issues=detect_issues(self._df),
@@ -473,16 +452,17 @@ def list_tasks():
         for k,v in TASK_REGISTRY.items()]}
 
 @app.post("/reset")
-def reset(req: ResetRequest):
+def reset(req: Optional[ResetRequest] = None):
     try:
-        if req.task_id not in TASK_REGISTRY:
-            raise HTTPException(400, f"Unknown task_id '{req.task_id}'")
-        obs = _get_env(req.task_id).reset()
-        return sanitize(obs.model_dump())   # ← sanitize before returning
+        task_id = (req.task_id if req else None) or "task_easy"
+        if task_id not in TASK_REGISTRY:
+            raise HTTPException(400, f"Unknown task_id")
+        obs = _get_env(task_id).reset()
+        return obs.model_dump()
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, detail=f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
+        raise HTTPException(500, detail=f"{type(e).__name__}: {e}")
 
 @app.post("/step")
 def step(req: StepRequest):
@@ -495,12 +475,8 @@ def step(req: StepRequest):
         action = Action(action_type=req.action_type, column=req.column,
                         value=req.value, params=req.params)
         obs, reward, done, info = env.step(action)
-        return sanitize({                   # ← sanitize before returning
-            "observation": obs.model_dump(),
-            "reward": reward.model_dump(),
-            "done": done,
-            "info": info,
-        })
+        return {"observation": obs.model_dump(), "reward": reward.model_dump(),
+                "done": done, "info": info}
     except HTTPException:
         raise
     except Exception as e:
@@ -509,7 +485,7 @@ def step(req: StepRequest):
 @app.get("/state")
 def state(task_id: str = "task_easy"):
     try:
-        return sanitize(_get_env(task_id).state())  # ← sanitize here too
+        return _get_env(task_id).state()
     except Exception as e:
         raise HTTPException(500, detail=str(e))
 
@@ -520,7 +496,7 @@ def grade(task_id: str = "task_easy"):
         if env._df is None:
             raise HTTPException(400, "Call /reset first.")
         score, reason = TASK_REGISTRY[task_id]["grader"](env._df)
-        return {"score": float(score), "reason": reason}
+        return {"score": score, "reason": reason}
     except HTTPException:
         raise
     except Exception as e:
