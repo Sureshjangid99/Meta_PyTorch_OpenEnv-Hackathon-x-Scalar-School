@@ -1,0 +1,87 @@
+name: data-cleaning-env
+version: "1.0.0"
+description: >
+  A real-world OpenEnv environment where an AI agent must clean messy CSV data.
+  Tasks include fixing missing values, correcting data types, removing duplicates,
+  and standardizing formats — common challenges in real data engineering pipelines.
+author: suresh9970
+tags:
+  - openenv
+  - data-cleaning
+  - real-world
+  - csv
+  - data-engineering
+
+observation_space:
+  type: object
+  fields:
+    - name: rows
+      type: list[dict]
+      description: Current CSV rows as list of dicts
+    - name: issues
+      type: list[str]
+      description: Detected data quality issues
+    - name: columns
+      type: list[str]
+      description: Column names
+    - name: step_count
+      type: int
+      description: Steps taken so far
+    - name: task_id
+      type: str
+      description: Current task identifier
+    - name: task_description
+      type: str
+      description: Natural language task objective
+    - name: done
+      type: bool
+      description: Whether the episode is complete
+
+action_space:
+  type: object
+  fields:
+    - name: action_type
+      type: str
+      enum:
+        - fill_missing
+        - drop_duplicates
+        - fix_type
+        - standardize_format
+        - drop_column
+        - rename_column
+        - filter_rows
+        - submit
+    - name: column
+      type: str
+      description: Target column (required for most actions)
+    - name: value
+      type: any
+      description: Value or strategy to apply
+    - name: params
+      type: dict
+      description: Extra parameters
+
+tasks:
+  - id: task_easy
+    name: Fill Missing Values
+    difficulty: easy
+    description: Fill all missing values in a sales CSV
+  - id: task_medium
+    name: Deduplicate and Fix Types
+    difficulty: medium
+    description: Remove duplicates and fix data types in a customer CSV
+  - id: task_hard
+    name: Full Pipeline Clean
+    difficulty: hard
+    description: Full 6-step cleaning pipeline on a messy employee dataset
+
+episode:
+  max_steps: 30
+  terminal_on_submit: true
+
+reward:
+  step_penalty: -0.02
+  progress_multiplier: 0.5
+  regression_multiplier: -0.3
+  useless_action: -0.05
+  final: grader_score
