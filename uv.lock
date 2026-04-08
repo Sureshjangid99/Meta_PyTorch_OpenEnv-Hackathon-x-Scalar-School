@@ -1,0 +1,16 @@
+version = 1
+requires-python = ">=3.11"
+
+[[package]]
+name = "data-cleaning-env"
+version = "1.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "fastapi" },
+    { name = "uvicorn" },
+    { name = "pydantic" },
+    { name = "pandas" },
+    { name = "numpy" },
+    { name = "openai" },
+    { name = "openenv-core" },
+]
